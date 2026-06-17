@@ -1,9 +1,11 @@
-//! share-terminal host (the "streamer").
+//! share-terminal host library (the "streamer").
 //!
 //! Spawns the user's shell inside a PTY, mirrors its output to the local
 //! terminal *and* to the relay, and forwards local keystrokes into the PTY so
 //! the session stays fully usable. Spectators are read-only — nothing they do
 //! can ever reach this PTY.
+//!
+//! The CLI front-end (`tcast stream`) parses arguments and calls [`run`].
 //!
 //! Hotkeys (prefix = Ctrl-O):
 //!   Ctrl-O p   toggle privacy (pause/resume what viewers see)
@@ -15,7 +17,6 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
 use bytes::Bytes;
-use clap::Parser as ClapParser;
 use futures_util::{SinkExt, StreamExt};
 use portable_pty::{native_pty_system, CommandBuilder, PtySize};
 use serde::Serialize;
@@ -27,24 +28,20 @@ use protocol::{decode, encode, HostHello, HostToRelay, RelayToHost, PROTOCOL_VER
 /// Hotkey prefix (Ctrl-O).
 const PREFIX: u8 = 0x0F;
 
-#[derive(ClapParser)]
-#[command(name = "share-terminal-host", about = "Stream your terminal with share-terminal")]
-struct Args {
-    /// Relay base URL (ws:// or wss://). "/host" is appended automatically.
-    #[arg(default_value = "ws://127.0.0.1:4455")]
-    relay: String,
+/// Everything needed to start a host session. The CLI builds this from its
+/// arguments + saved config; unset `name`/`shell` fall back to sensible
+/// per-platform defaults inside [`run`].
+pub struct StreamConfig {
+    /// Relay base URL (ws:// or wss://). `/host` is appended automatically.
+    pub relay: String,
     /// Display name shown to viewers (default: your username).
-    #[arg(long)]
-    name: Option<String>,
+    pub name: Option<String>,
     /// Shell to launch (default: powershell.exe on Windows, $SHELL on Unix).
-    #[arg(long)]
-    shell: Option<String>,
+    pub shell: Option<String>,
     /// List this stream in the public directory (default: private, code-only).
-    #[arg(long)]
-    public: bool,
+    pub public: bool,
     /// Auth key, if the relay requires one.
-    #[arg(long)]
-    auth_key: Option<String>,
+    pub auth_key: Option<String>,
 }
 
 /// Control messages from the stdin thread to the async core.
@@ -209,20 +206,19 @@ fn write_stdout(lock: &Mutex<()>, bytes: &[u8]) {
     let _ = out.flush();
 }
 
-// ──────────────────────────────── main ──────────────────────────────────
+// ──────────────────────────────── run ────────────────────────────────────
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let args = Args::parse();
-    let name = args.name.unwrap_or_else(default_name);
-    let shell = args.shell.unwrap_or_else(default_shell);
+/// Start a host session and stream until the shell exits or the user quits.
+pub async fn run(cfg: StreamConfig) -> Result<()> {
+    let name = cfg.name.unwrap_or_else(default_name);
+    let shell = cfg.shell.unwrap_or_else(default_shell);
     let shell_lbl = shell_label(&shell);
 
     let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
 
     // Build the host WebSocket URL.
-    let url = format!("{}/host", args.relay.trim_end_matches('/'));
-    println!("share-terminal · connecting to {url} …");
+    let url = format!("{}/host", cfg.relay.trim_end_matches('/'));
+    println!("tcast · connecting to {url} …");
 
     let (ws, _resp) = tokio_tungstenite::connect_async(&url)
         .await
@@ -234,10 +230,10 @@ async fn main() -> Result<()> {
         .send(bin(&HostToRelay::Hello(HostHello {
             name: name.clone(),
             shell: shell_lbl.clone(),
-            public: args.public,
+            public: cfg.public,
             cols,
             rows,
-            auth_key: args.auth_key.clone(),
+            auth_key: cfg.auth_key.clone(),
             version: PROTOCOL_VERSION.to_string(),
         })))
         .await
@@ -254,7 +250,7 @@ async fn main() -> Result<()> {
         _ => anyhow::bail!("relay closed the connection during handshake"),
     };
 
-    print_banner(&name, &shell_lbl, args.public, &code, &stream_id, &args.relay);
+    print_banner(&name, &shell_lbl, cfg.public, &code, &stream_id, &cfg.relay);
 
     // ── Spawn the PTY + shell ────────────────────────────────────────────
     let pty_system = native_pty_system();
@@ -433,7 +429,7 @@ async fn main() -> Result<()> {
     let _ = killer.kill();
     let _ = write.send(Message::Close(None)).await;
     drop(_raw);
-    println!("\r\nshare-terminal · stream ended.");
+    println!("\r\ntcast · stream ended.");
     Ok(())
 }
 
@@ -443,7 +439,7 @@ fn print_banner(name: &str, shell: &str, public: bool, code: &str, stream_id: &s
     } else {
         "private (code only)"
     };
-    println!("\n┌─ share-terminal ────────────────────────────────");
+    println!("\n┌─ tcast ─────────────────────────────────────────");
     println!("│ streaming as : {name}  ({shell})");
     println!("│ visibility   : {scope}");
     println!("│ join code    : {code}");
@@ -451,9 +447,9 @@ fn print_banner(name: &str, shell: &str, public: bool, code: &str, stream_id: &s
         println!("│ stream id    : {stream_id}");
     }
     println!("│");
-    println!("│ viewers run  : share-terminal-watch {relay}");
-    println!("│   then pick you from the list, or join directly:");
-    println!("│   share-terminal-watch {relay} {code}");
+    println!("│ viewers run  : tcast watch {code}");
+    println!("│   (first point them at this relay:");
+    println!("│    tcast config set-relay {relay})");
     println!("│");
     println!("│ hotkeys      : Ctrl-O p = privacy · Ctrl-O q = quit");
     println!("└──────────────────────────────────────────────────\n");

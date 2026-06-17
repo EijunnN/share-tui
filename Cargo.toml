@@ -1,13 +1,13 @@
 [workspace]
 resolver = "2"
-members = ["crates/protocol", "crates/host", "crates/relay", "crates/watch"]
+members = ["crates/protocol", "crates/host", "crates/relay", "crates/watch", "crates/cli"]
 
 [workspace.package]
 version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["jeanpierrev20"]
-repository = "https://github.com/jeanpierrev20/share-terminal"
+repository = "https://github.com/EijunnN/share-tui"
 
 [profile.release]
 lto = "thin"

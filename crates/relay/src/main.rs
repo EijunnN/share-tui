@@ -89,7 +89,7 @@ struct Registry {
 }
 
 #[derive(ClapParser)]
-#[command(name = "relay", about = "share-terminal relay server")]
+#[command(name = "tcast-relay", about = "tcast relay server")]
 struct Args {
     /// Address to bind, e.g. 0.0.0.0:4455
     #[arg(long, default_value = "0.0.0.0:4455")]

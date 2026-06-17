@@ -1,14 +1,16 @@
-//! share-terminal watch (the "spectator").
+//! share-terminal watch library (the "spectator").
 //!
 //! Connects to the relay, lets you browse live public streams (or join a private
 //! one by code), and renders the chosen terminal read-only using a vt100
 //! emulator drawn through `tui-term`.
+//!
+//! The CLI front-end calls [`run`] for the interactive browser/viewer and
+//! [`list`] for a one-shot, non-interactive directory dump (`tcast list`).
 
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use bytes::Bytes;
-use clap::Parser as ClapParser;
 use crossterm::event::{Event, EventStream, KeyCode, KeyEventKind, KeyModifiers};
 use futures_util::{SinkExt, StreamExt};
 use ratatui::prelude::*;
@@ -21,14 +23,12 @@ use protocol::{
     decode, encode, RelayToWatch, StreamInfo, WatchHello, WatchToRelay, PROTOCOL_VERSION,
 };
 
-#[derive(ClapParser)]
-#[command(name = "share-terminal-watch", about = "Watch a shared terminal")]
-struct Args {
-    /// Relay base URL (ws:// or wss://). "/watch" is appended automatically.
-    #[arg(default_value = "ws://127.0.0.1:4455")]
-    relay: String,
+/// Everything needed to open the spectator UI.
+pub struct WatchConfig {
+    /// Relay base URL (ws:// or wss://). `/watch` is appended automatically.
+    pub relay: String,
     /// Join this code / stream id directly, skipping the browser.
-    target: Option<String>,
+    pub target: Option<String>,
 }
 
 /// Events from the network task to the UI.
@@ -90,10 +90,97 @@ fn fmt_uptime(started: u64) -> String {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<()> {
-    let args = Args::parse();
-    let url = format!("{}/watch", args.relay.trim_end_matches('/'));
+// ──────────────────────────── non-interactive list ───────────────────────
+
+/// Connect once, fetch the public stream directory, print it, and exit.
+/// Backs `tcast list [--json]` — no TUI, scriptable.
+pub async fn list(relay: String, json: bool) -> Result<()> {
+    let url = format!("{}/watch", relay.trim_end_matches('/'));
+    let (ws, _resp) = tokio_tungstenite::connect_async(&url)
+        .await
+        .with_context(|| format!("connecting to relay at {url}"))?;
+    let (mut write, mut read) = ws.split();
+
+    write
+        .send(bin(&WatchToRelay::Hello(WatchHello {
+            version: PROTOCOL_VERSION.to_string(),
+            cols: 0,
+            rows: 0,
+        })))
+        .await
+        .context("sending Hello")?;
+
+    // Wait for the handshake to be accepted before asking for the list.
+    loop {
+        match read.next().await {
+            Some(Ok(Message::Binary(b))) => match decode::<RelayToWatch>(&b[..]) {
+                Ok(RelayToWatch::Welcome) => break,
+                Ok(RelayToWatch::Error(e)) => anyhow::bail!("relay refused the connection: {e}"),
+                _ => {} // ignore anything else until Welcome
+            },
+            Some(Ok(Message::Ping(p))) => {
+                let _ = write.send(Message::Pong(p)).await;
+            }
+            Some(Ok(_)) => {}
+            _ => anyhow::bail!("relay closed the connection during handshake"),
+        }
+    }
+
+    write
+        .send(bin(&WatchToRelay::List))
+        .await
+        .context("requesting stream list")?;
+
+    let streams = loop {
+        match read.next().await {
+            Some(Ok(Message::Binary(b))) => match decode::<RelayToWatch>(&b[..]) {
+                Ok(RelayToWatch::Streams(v)) => break v,
+                Ok(RelayToWatch::Error(e)) => anyhow::bail!("relay error: {e}"),
+                _ => {}
+            },
+            Some(Ok(Message::Ping(p))) => {
+                let _ = write.send(Message::Pong(p)).await;
+            }
+            Some(Ok(_)) => {}
+            _ => anyhow::bail!("relay closed the connection before sending the list"),
+        }
+    };
+
+    if json {
+        println!("{}", serde_json::to_string_pretty(&streams)?);
+        return Ok(());
+    }
+
+    if streams.is_empty() {
+        println!("No public streams are live right now.");
+        return Ok(());
+    }
+
+    println!(
+        "{:<18}{:<12}{:>4}  {:>9}  {:<8}{}",
+        "NAME", "SHELL", "👁", "SIZE", "UPTIME", "ID"
+    );
+    for s in &streams {
+        let size = format!("{}x{}", s.cols, s.rows);
+        println!(
+            "{:<18}{:<12}{:>4}  {:>9}  {:<8}{}",
+            trunc(&s.name, 17),
+            trunc(&s.shell, 11),
+            s.viewers,
+            size,
+            fmt_uptime(s.started_unix),
+            s.stream_id,
+        );
+    }
+    Ok(())
+}
+
+// ──────────────────────────────── run ────────────────────────────────────
+
+/// Open the interactive spectator UI: browse public streams, or (if
+/// `cfg.target` is set) join that code/id directly.
+pub async fn run(cfg: WatchConfig) -> Result<()> {
+    let url = format!("{}/watch", cfg.relay.trim_end_matches('/'));
 
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<WatchToRelay>();
     let (ui_tx, mut ui_rx) = mpsc::unbounded_channel::<Net>();
@@ -101,7 +188,7 @@ async fn main() -> Result<()> {
     tokio::spawn(net_task(url, cmd_rx, ui_tx));
 
     let mut app = App {
-        relay: args.relay.clone(),
+        relay: cfg.relay.clone(),
         screen: Screen::Browsing,
         status: "connecting…".to_string(),
         connected: false,
@@ -110,7 +197,7 @@ async fn main() -> Result<()> {
         joined: None,
         parser: None,
         paused: false,
-        pending_target: args.target.clone(),
+        pending_target: cfg.target.clone(),
         last_target: None,
     };
 
@@ -324,7 +411,7 @@ fn ui_browse(f: &mut Frame, app: &mut App) {
     let dot = if app.connected { "●" } else { "○" };
     let header = Line::from(vec![
         Span::styled(
-            format!(" {dot} share-terminal "),
+            format!(" {dot} tcast "),
             Style::new().bold().fg(Color::Cyan),
         ),
         Span::styled(format!("· {} ", app.relay), Style::new().fg(Color::DarkGray)),
@@ -336,7 +423,7 @@ fn ui_browse(f: &mut Frame, app: &mut App) {
         let msg = Paragraph::new(
             "No public streams are live right now.\n\n\
              • press r to refresh\n\
-             • to watch a private stream, pass its code on the CLI:\n    share-terminal-watch <relay> <code>",
+             • to watch a private stream, pass its code on the CLI:\n    tcast watch <code>",
         )
         .wrap(Wrap { trim: false })
         .block(Block::default().borders(Borders::ALL).title(" live streams "));

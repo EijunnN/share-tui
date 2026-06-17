@@ -1,24 +1,24 @@
-# systemd unit for the share-terminal relay.
+# systemd unit for the tcast relay.
 #
 # Install:
-#   sudo cp target/release/relay /usr/local/bin/share-terminal-relay
+#   sudo cp target/release/tcast-relay /usr/local/bin/tcast-relay
 #   sudo cp deploy/share-terminal-relay.service /etc/systemd/system/
-#   echo 'SHARE_TERMINAL_AUTH_KEY=change-me' | sudo tee /etc/share-terminal.env
+#   echo 'SHARE_TERMINAL_AUTH_KEY=change-me' | sudo tee /etc/tcast-relay.env
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable --now share-terminal-relay
 #
 # The relay binds to localhost only; TLS is terminated by Caddy in front of it.
 
 [Unit]
-Description=share-terminal relay
+Description=tcast relay
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
 # Optional: a shared host secret. Remove the line to run an open relay.
-EnvironmentFile=-/etc/share-terminal.env
-ExecStart=/usr/local/bin/share-terminal-relay --bind 127.0.0.1:4455
+EnvironmentFile=-/etc/tcast-relay.env
+ExecStart=/usr/local/bin/tcast-relay --bind 127.0.0.1:4455
 Restart=on-failure
 RestartSec=2
 # Hardening
