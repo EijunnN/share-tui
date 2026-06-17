@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2024"
 description = "Share or watch terminals live — a Twitch/Kick for terminals"
 license = "MIT"
-repository = "https://github.com/EijunnN/share-tui"
+repository = "https://github.com/EijunnN/tcast"
 
 [[bin]]
 name = "tcast"

@@ -7,7 +7,7 @@ version = "0.1.0"
 edition = "2021"
 license = "MIT"
 authors = ["jeanpierrev20"]
-repository = "https://github.com/EijunnN/share-tui"
+repository = "https://github.com/EijunnN/tcast"
 
 [profile.release]
 lto = "thin"

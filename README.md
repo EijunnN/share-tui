@@ -25,11 +25,11 @@ Prebuilt binaries, no Rust toolchain needed:
 
 ```sh
 # Linux / macOS
-curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/EijunnN/share-tui/main/install.sh | sh
+curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/EijunnN/tcast/main/install.sh | sh
 ```
 ```powershell
 # Windows (PowerShell)
-irm https://raw.githubusercontent.com/EijunnN/share-tui/main/install.ps1 | iex
+irm https://raw.githubusercontent.com/EijunnN/tcast/main/install.ps1 | iex
 ```
 
 The installer drops `tcast` on your `PATH`. Then point it at a relay once:
@@ -39,7 +39,7 @@ tcast config set-relay wss://relay.example.com
 ```
 
 > No prebuilt binary for your platform? Install with Cargo instead:
-> `cargo install --git https://github.com/EijunnN/share-tui tcast`
+> `cargo install --git https://github.com/EijunnN/tcast tcast`
 
 ## Use it
 
@@ -164,7 +164,7 @@ exhaust memory) or build the binary on another machine and `scp` it over.
 ### 2. Build
 
 ```bash
-git clone https://github.com/EijunnN/share-tui && cd share-tui
+git clone https://github.com/EijunnN/tcast && cd tcast
 cargo build --release -p relay      # → target/release/tcast-relay
 ```
 

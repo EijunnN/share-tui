@@ -2,7 +2,7 @@
 # Releases, verifies its sha256, installs it under %LOCALAPPDATA%, and adds it
 # to the per-user PATH.
 #
-#   powershell -c "irm https://raw.githubusercontent.com/EijunnN/share-tui/main/install.ps1 | iex"
+#   powershell -c "irm https://raw.githubusercontent.com/EijunnN/tcast/main/install.ps1 | iex"
 #
 # Env overrides:
 #   $env:TCAST_VERSION       release tag to install (default: latest)
@@ -11,7 +11,7 @@
 $ErrorActionPreference = 'Stop'
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-$Repo = 'EijunnN/share-tui'
+$Repo = 'EijunnN/tcast'
 $Bin  = 'tcast'
 $Version = if ($env:TCAST_VERSION) { $env:TCAST_VERSION } else { 'latest' }
 

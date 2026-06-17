@@ -2,14 +2,14 @@
 # tcast installer — downloads a prebuilt `tcast` binary from GitHub Releases,
 # verifies its sha256, and installs it to ~/.local/bin (or /usr/local/bin).
 #
-#   curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/EijunnN/share-tui/main/install.sh | sh
+#   curl --proto '=https' --tlsv1.2 -LsSf https://raw.githubusercontent.com/EijunnN/tcast/main/install.sh | sh
 #
 # Env overrides:
 #   TCAST_VERSION       release tag to install (default: latest)
 #   TCAST_INSTALL_DIR   target directory (default: ~/.local/bin)
 set -eu
 
-REPO="EijunnN/share-tui"
+REPO="EijunnN/tcast"
 BIN="tcast"
 VERSION="${TCAST_VERSION:-latest}"
 
