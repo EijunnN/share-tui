@@ -141,25 +141,81 @@ tcast-relay [--bind ADDR] [--auth-key KEY]
   --auth-key   shared host secret (or env SHARE_TERMINAL_AUTH_KEY)
 ```
 
-## Deploy the relay on a VPS (internet, with TLS)
+## Deploy the relay on a VPS (operator guide)
 
-The relay speaks plain HTTP/WS and expects TLS to be terminated by a reverse proxy.
+Only the **relay** runs on the server — end users never touch the VPS. You need
+a VPS and a **domain**: the relay requires TLS for `wss://`, and Let's Encrypt
+issues certificates for domain names. Before you start, point a DNS **A record**
+(e.g. `relay.example.com`) at your VPS's public IP.
 
-1. Build on the server: `cargo build --release -p relay` (binary: `target/release/tcast-relay`).
-2. Put [Caddy](https://caddyserver.com) in front for automatic TLS — see
-   [`deploy/Caddyfile`](deploy/Caddyfile). Caddy proxies WebSocket upgrades transparently.
-3. Run the relay under systemd — see
-   [`deploy/share-terminal-relay.service`](deploy/share-terminal-relay.service).
-   Set `SHARE_TERMINAL_AUTH_KEY` to require a host key.
+### 1. Prerequisites
 
-Then everyone uses `wss://relay.example.com`:
-```
-tcast config set-relay wss://relay.example.com
-tcast stream --public --auth-key change-me
-tcast watch
+```bash
+# Rust (the project uses edition 2024 → needs Rust ≥ 1.85)
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+# a linker (cc), needed even for pure-Rust crates
+sudo apt update && sudo apt install -y build-essential
 ```
 
-`GET /api/streams` returns the public list as JSON (handy for monitoring / a future web UI).
+The relay does **not** use native-tls/OpenSSL, so building *only the relay*
+needs no `libssl-dev`. On a VPS with < 1 GB RAM, add swap (release LTO can
+exhaust memory) or build the binary on another machine and `scp` it over.
+
+### 2. Build
+
+```bash
+git clone https://github.com/EijunnN/share-tui && cd share-tui
+cargo build --release -p relay      # → target/release/tcast-relay
+```
+
+### 3. TLS via Caddy
+
+[Caddy](https://caddyserver.com) obtains and renews a Let's Encrypt certificate
+automatically and proxies WebSocket upgrades transparently. Edit
+[`deploy/Caddyfile`](deploy/Caddyfile) with your domain:
+
+```
+relay.example.com {
+    reverse_proxy 127.0.0.1:4455
+}
+```
+
+Open ports **80** (ACME validation) and **443** in your firewall. The relay
+itself stays bound to localhost — do not expose 4455.
+
+### 4. Run under systemd
+
+The relay binds to `127.0.0.1:4455` (behind Caddy). Install the unit from
+[`deploy/share-terminal-relay.service`](deploy/share-terminal-relay.service):
+
+```bash
+sudo cp target/release/tcast-relay /usr/local/bin/tcast-relay
+sudo cp deploy/share-terminal-relay.service /etc/systemd/system/
+echo 'SHARE_TERMINAL_AUTH_KEY=change-me' | sudo tee /etc/tcast-relay.env   # optional
+sudo systemctl daemon-reload
+sudo systemctl enable --now share-terminal-relay
+```
+
+`SHARE_TERMINAL_AUTH_KEY` is **optional** and gates *streaming* only (viewers
+never need it). Omit the env file to run an open relay.
+
+### 5. Users connect
+
+```sh
+tcast config set-relay wss://relay.example.com   # once
+tcast watch                                       # spectate
+tcast stream --public --auth-key change-me        # stream (if a key is set)
+```
+
+`GET https://relay.example.com/api/streams` returns the public list as JSON
+(handy for monitoring / a future web UI).
+
+### Good to know
+
+- **No database.** Streams live in memory; restarting the relay drops active
+  sessions (clients auto-reconnect). Nothing to back up.
+- **Version lock-step.** Client and relay share `PROTOCOL_VERSION`; after pulling
+  repo updates, rebuild and redeploy the relay.
 
 ## Releases
 
