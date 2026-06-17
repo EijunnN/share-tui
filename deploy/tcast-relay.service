@@ -2,10 +2,10 @@
 #
 # Install:
 #   sudo cp target/release/tcast-relay /usr/local/bin/tcast-relay
-#   sudo cp deploy/share-terminal-relay.service /etc/systemd/system/
-#   echo 'SHARE_TERMINAL_AUTH_KEY=change-me' | sudo tee /etc/tcast-relay.env
+#   sudo cp deploy/tcast-relay.service /etc/systemd/system/
+#   echo 'TCAST_AUTH_KEY=change-me' | sudo tee /etc/tcast-relay.env
 #   sudo systemctl daemon-reload
-#   sudo systemctl enable --now share-terminal-relay
+#   sudo systemctl enable --now tcast-relay
 #
 # The relay binds to localhost only; TLS is terminated by Caddy in front of it.
 

@@ -1,4 +1,4 @@
-//! share-terminal relay.
+//! tcast relay.
 //!
 //! Central server that hosts connect to (pushing terminal output) and that
 //! watchers connect to (browsing and viewing streams). TLS is expected to be
@@ -95,8 +95,8 @@ struct Args {
     #[arg(long, default_value = "0.0.0.0:4455")]
     bind: String,
     /// Optional shared secret hosts must present to stream. Can also be set via
-    /// the SHARE_TERMINAL_AUTH_KEY environment variable (handy for systemd).
-    #[arg(long, env = "SHARE_TERMINAL_AUTH_KEY")]
+    /// the TCAST_AUTH_KEY environment variable (handy for systemd).
+    #[arg(long, env = "TCAST_AUTH_KEY")]
     auth_key: Option<String>,
 }
 
@@ -131,7 +131,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn root() -> &'static str {
-    "share-terminal relay — OK"
+    "tcast relay — OK"
 }
 
 async fn api_streams(State(reg): State<Arc<Registry>>) -> impl IntoResponse {

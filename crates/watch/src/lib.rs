@@ -1,4 +1,4 @@
-//! share-terminal watch library (the "spectator").
+//! tcast watch library (the "spectator").
 //!
 //! Connects to the relay, lets you browse live public streams (or join a private
 //! one by code), and renders the chosen terminal read-only using a vt100

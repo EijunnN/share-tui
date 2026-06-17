@@ -1,4 +1,4 @@
-//! share-terminal host library (the "streamer").
+//! tcast host library (the "streamer").
 //!
 //! Spawns the user's shell inside a PTY, mirrors its output to the local
 //! terminal *and* to the relay, and forwards local keystrokes into the PTY so

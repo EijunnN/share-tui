@@ -1,4 +1,4 @@
-# tcast — share-terminal
+# tcast
 
 **Twitch/Kick, but for terminals.** A streamer shares their live terminal; spectators
 open a CLI, browse the live streams (or join a private one by code) and watch in
@@ -138,7 +138,7 @@ tcast [--relay URL] [--config PATH] [COMMAND]
 ```
 tcast-relay [--bind ADDR] [--auth-key KEY]
   --bind       default 0.0.0.0:4455
-  --auth-key   shared host secret (or env SHARE_TERMINAL_AUTH_KEY)
+  --auth-key   shared host secret (or env TCAST_AUTH_KEY)
 ```
 
 ## Deploy the relay on a VPS (operator guide)
@@ -186,17 +186,17 @@ itself stays bound to localhost — do not expose 4455.
 ### 4. Run under systemd
 
 The relay binds to `127.0.0.1:4455` (behind Caddy). Install the unit from
-[`deploy/share-terminal-relay.service`](deploy/share-terminal-relay.service):
+[`deploy/tcast-relay.service`](deploy/tcast-relay.service):
 
 ```bash
 sudo cp target/release/tcast-relay /usr/local/bin/tcast-relay
-sudo cp deploy/share-terminal-relay.service /etc/systemd/system/
-echo 'SHARE_TERMINAL_AUTH_KEY=change-me' | sudo tee /etc/tcast-relay.env   # optional
+sudo cp deploy/tcast-relay.service /etc/systemd/system/
+echo 'TCAST_AUTH_KEY=change-me' | sudo tee /etc/tcast-relay.env   # optional
 sudo systemctl daemon-reload
-sudo systemctl enable --now share-terminal-relay
+sudo systemctl enable --now tcast-relay
 ```
 
-`SHARE_TERMINAL_AUTH_KEY` is **optional** and gates *streaming* only (viewers
+`TCAST_AUTH_KEY` is **optional** and gates *streaming* only (viewers
 never need it). Omit the env file to run an open relay.
 
 ### 5. Users connect
