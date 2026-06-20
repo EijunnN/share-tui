@@ -66,6 +66,9 @@ struct StreamArgs {
     /// Auth key, if the relay requires one (default: saved config).
     #[arg(long)]
     auth_key: Option<String>,
+    /// Hotkey prefix key — a letter mapped to its Ctrl- code (default: Ctrl-]).
+    #[arg(long)]
+    prefix: Option<char>,
 }
 
 #[derive(Args)]
@@ -123,12 +126,18 @@ async fn main() -> Result<()> {
         }
         Some(Command::Stream(a)) => {
             let relay = config::resolve_relay(cli.relay, &cfg);
+            let prefix = match a.prefix {
+                Some(c) if c.is_ascii_alphabetic() => (c.to_ascii_uppercase() as u8) & 0x1f,
+                Some(c) => anyhow::bail!("--prefix must be a letter a-z (got {c:?})"),
+                None => host::DEFAULT_PREFIX,
+            };
             host::run(host::StreamConfig {
                 relay,
                 name: a.name.or_else(|| cfg.name.clone()),
                 shell: a.shell,
                 public: a.public,
                 auth_key: a.auth_key.or_else(|| cfg.auth_key.clone()),
+                prefix,
             })
             .await
         }

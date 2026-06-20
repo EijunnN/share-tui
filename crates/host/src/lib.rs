@@ -7,10 +7,13 @@
 //!
 //! The CLI front-end (`tcast stream`) parses arguments and calls [`run`].
 //!
-//! Hotkeys (prefix = Ctrl-O):
-//!   Ctrl-O p   toggle privacy (pause/resume what viewers see)
-//!   Ctrl-O q   stop streaming and quit
-//!   Ctrl-O Ctrl-O  send a literal Ctrl-O to the shell
+//! Hotkeys use a configurable prefix key (default Ctrl-], override with
+//! `tcast stream --prefix <letter>`). With the default prefix:
+//!   Ctrl-] p   toggle privacy (pause/resume what viewers see)
+//!   Ctrl-] q   stop streaming and quit
+//!   Ctrl-] Ctrl-]  send a literal Ctrl-] to the shell
+//! Typing `exit` (or Ctrl-D) in the shell also ends the stream — handy when an
+//! inner app (Claude Code, nano…) binds the prefix key.
 
 use std::io::{Read, Write};
 use std::sync::{Arc, Mutex};
@@ -25,8 +28,9 @@ use tokio_tungstenite::tungstenite::Message;
 
 use protocol::{decode, encode, HostHello, HostToRelay, RelayToHost, PROTOCOL_VERSION};
 
-/// Hotkey prefix (Ctrl-O).
-const PREFIX: u8 = 0x0F;
+/// Default hotkey prefix (Ctrl-], 0x1D). Avoids the common Ctrl-O binding
+/// (Claude Code, nano's WriteOut, Emacs). Override with `tcast stream --prefix`.
+pub const DEFAULT_PREFIX: u8 = 0x1D;
 
 /// Everything needed to start a host session. The CLI builds this from its
 /// arguments + saved config; unset `name`/`shell` fall back to sensible
@@ -42,6 +46,8 @@ pub struct StreamConfig {
     pub public: bool,
     /// Auth key, if the relay requires one.
     pub auth_key: Option<String>,
+    /// Hotkey prefix byte (a Ctrl- control code). See [`DEFAULT_PREFIX`].
+    pub prefix: u8,
 }
 
 /// Control messages from the stdin thread to the async core.
@@ -213,6 +219,7 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
     let name = cfg.name.unwrap_or_else(default_name);
     let shell = cfg.shell.unwrap_or_else(default_shell);
     let shell_lbl = shell_label(&shell);
+    let prefix = cfg.prefix;
 
     let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
 
@@ -250,7 +257,7 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
         _ => anyhow::bail!("relay closed the connection during handshake"),
     };
 
-    print_banner(&name, &shell_lbl, cfg.public, &code, &stream_id, &cfg.relay);
+    print_banner(&name, &shell_lbl, cfg.public, &code, &stream_id, &cfg.relay, prefix);
 
     // ── Spawn the PTY + shell ────────────────────────────────────────────
     let pty_system = native_pty_system();
@@ -332,10 +339,10 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
                                 let _ = ctl_tx.send(Ctl::Quit);
                                 return;
                             }
-                            PREFIX => forward.push(PREFIX),
+                            b if b == prefix => forward.push(prefix),
                             _ => {} // unknown command: swallow
                         }
-                    } else if byte == PREFIX {
+                    } else if byte == prefix {
                         prefix_armed = true;
                     } else {
                         forward.push(byte);
@@ -433,7 +440,7 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
     Ok(())
 }
 
-fn print_banner(name: &str, shell: &str, public: bool, code: &str, stream_id: &str, relay: &str) {
+fn print_banner(name: &str, shell: &str, public: bool, code: &str, stream_id: &str, relay: &str, prefix: u8) {
     let scope = if public {
         "PUBLIC (listed)"
     } else {
@@ -451,6 +458,8 @@ fn print_banner(name: &str, shell: &str, public: bool, code: &str, stream_id: &s
     println!("│   (first point them at this relay:");
     println!("│    tcast config set-relay {relay})");
     println!("│");
-    println!("│ hotkeys      : Ctrl-O p = privacy · Ctrl-O q = quit");
+    let pk = format!("Ctrl-{}", (prefix | 0x40) as char);
+    println!("│ hotkeys      : {pk} p = privacy · {pk} q = quit");
+    println!("│ stop also    : type `exit` (or Ctrl-D) in the shell");
     println!("└──────────────────────────────────────────────────\n");
 }

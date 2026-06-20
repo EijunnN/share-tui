@@ -56,7 +56,7 @@ Per-command relay override: `tcast --relay wss://other.example.com watch`, or se
 the `TCAST_RELAY` environment variable. Precedence: `--relay` / `TCAST_RELAY` →
 saved config (`tcast config set-relay`) → built-in default → `ws://127.0.0.1:4455`.
 
-**Host hotkeys:** `Ctrl-O p` privacy toggle · `Ctrl-O q` quit · `Ctrl-O Ctrl-O` literal Ctrl-O.
+**Host hotkeys** (prefix defaults to `Ctrl-]`; change it with `tcast stream --prefix <letter>`): `Ctrl-] p` privacy · `Ctrl-] q` quit · `Ctrl-] Ctrl-]` literal. Or just type `exit` / `Ctrl-D` in the shell to end the stream — handy when an inner app (Claude Code, nano…) uses your prefix key.
 **Watch keys:** `↑/↓` move · `Enter` watch · `r` refresh · `q`/`Esc` back/quit · `Ctrl-C` quit.
 
 ## Why it's safe to watch (and to stream)
@@ -128,7 +128,7 @@ cargo run -p tcast -- watch --relay ws://127.0.0.1:4455 <code>
 ```
 tcast [--relay URL] [--config PATH] [COMMAND]
   (no command)             open the watch browser
-  stream [--name NAME] [--shell SHELL] [--public] [--auth-key KEY]
+  stream [--name NAME] [--shell SHELL] [--public] [--auth-key KEY] [--prefix LETTER]
   watch  [CODE_OR_ID]
   list   [--json]
   config set-relay <URL> | set-auth-key <KEY> | set-name <NAME> | show [--path]
