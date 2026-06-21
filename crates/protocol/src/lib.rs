@@ -41,7 +41,7 @@ use serde::{Deserialize, Serialize};
 /// Protocol version. Bumped on any breaking change to the message shapes below.
 /// The host sends it in [`HostHello::version`] and a watcher in [`WatchHello`]
 /// so the relay can reject incompatible peers cleanly instead of mis-decoding.
-pub const PROTOCOL_VERSION: &str = "0.2";
+pub const PROTOCOL_VERSION: &str = "0.3";
 
 /// Default relay listen / connect port.
 pub const DEFAULT_PORT: u16 = 4455;
@@ -56,6 +56,10 @@ pub enum HostToRelay {
     /// A chunk of raw PTY output (already ANSI/VT-encoded). This is the bulk of
     /// the traffic, so the payload is sent as raw bytes via `serde_bytes`.
     Output(#[serde(with = "serde_bytes")] Vec<u8>),
+    /// A frame of raw PCM voice (48 kHz mono i16 LE) while the host is
+    /// push-to-talking. One-way host→viewers; carries no viewer input, so the
+    /// read-only invariant is unaffected.
+    Audio(#[serde(with = "serde_bytes")] Vec<u8>),
     /// The host's terminal was resized. Viewers and the relay's emulator must
     /// resize their screen to match.
     Resize { cols: u16, rows: u16 },
@@ -153,6 +157,8 @@ pub enum RelayToWatch {
     },
     /// A live output delta from the joined host.
     Output(#[serde(with = "serde_bytes")] Vec<u8>),
+    /// A frame of raw PCM voice from the host (48 kHz mono i16 LE), to play back.
+    Audio(#[serde(with = "serde_bytes")] Vec<u8>),
     /// The joined host resized its terminal.
     Resize { cols: u16, rows: u16 },
     /// The joined host toggled privacy mode.

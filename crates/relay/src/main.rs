@@ -66,6 +66,7 @@ enum Bcast {
     Privacy(bool),
     Viewers(u32),
     Chat { from: String, text: String, ts: u64 },
+    Audio(Arc<Vec<u8>>),
     Ended,
 }
 
@@ -385,6 +386,11 @@ async fn handle_host(socket: WebSocket, reg: Arc<Registry>) {
                                 let _ = stream.tx.send(Bcast::Output(Arc::new(data)));
                             }
                         }
+                        Ok(HostToRelay::Audio(data)) => {
+                            // Voice is independent of screen privacy; forward it
+                            // best-effort (never parsed, dropped under lag).
+                            let _ = stream.tx.send(Bcast::Audio(Arc::new(data)));
+                        }
                         Ok(HostToRelay::Resize { cols, rows }) => {
                             let (c, r) = (cols.max(1), rows.max(1));
                             stream.parser.lock().await.screen_mut().set_size(r, c);
@@ -578,6 +584,15 @@ async fn handle_watch(socket: WebSocket, reg: Arc<Registry>) {
                     Ok(Bcast::Chat { from, text, ts }) => {
                         if sender
                             .send(bin(&RelayToWatch::Chat { from, text, ts_unix: ts }))
+                            .await
+                            .is_err()
+                        {
+                            break;
+                        }
+                    }
+                    Ok(Bcast::Audio(buf)) => {
+                        if sender
+                            .send(bin(&RelayToWatch::Audio((*buf).clone())))
                             .await
                             .is_err()
                         {

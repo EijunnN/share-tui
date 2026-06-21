@@ -74,6 +74,9 @@ struct StreamArgs {
     /// Accept viewer chat on this stream (view it with `tcast chat`).
     #[arg(long)]
     chat: bool,
+    /// Capture your mic for push-to-talk voice (prefix + `t` toggles it).
+    #[arg(long)]
+    voice: bool,
 }
 
 #[derive(Args)]
@@ -172,6 +175,7 @@ async fn main() -> Result<()> {
                 public: a.public,
                 auth_key: a.auth_key.or_else(|| cfg.auth_key.clone()),
                 chat: a.chat,
+                voice: a.voice,
                 prefix,
             })
             .await

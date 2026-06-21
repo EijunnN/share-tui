@@ -16,6 +16,7 @@
 //! inner app (Claude Code, nano…) binds the prefix key.
 
 use std::io::{Read, Write};
+use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
 
 use anyhow::{Context, Result};
@@ -48,6 +49,8 @@ pub struct StreamConfig {
     pub auth_key: Option<String>,
     /// Accept viewer chat for this stream (`tcast stream --chat`).
     pub chat: bool,
+    /// Capture the microphone for push-to-talk voice (`tcast stream --voice`).
+    pub voice: bool,
     /// Hotkey prefix byte (a Ctrl- control code). See [`DEFAULT_PREFIX`].
     pub prefix: u8,
 }
@@ -284,6 +287,28 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
     // guard clears the marker when the session ends (any exit path or panic).
     let _owned = OwnedGuard::new(&stream_id, &code);
 
+    // Optional push-to-talk voice. Capture runs on its own thread and feeds 20 ms
+    // PCM frames through this channel; we forward them while PTT is active.
+    let (audio_tx, mut audio_rx) = mpsc::unbounded_channel::<Vec<i16>>();
+    let capture = if cfg.voice {
+        match audio::Capture::start(audio_tx) {
+            Ok(c) => {
+                let pk = format!("Ctrl-{}", (prefix | 0x40) as char);
+                println!("tcast · voice ready — {pk} t toggles your mic (push-to-talk)");
+                Some(c)
+            }
+            Err(e) => {
+                eprintln!("tcast · voice disabled: {e}");
+                None
+            }
+        }
+    } else {
+        drop(audio_tx); // close the channel so the forward arm stays inert
+        None
+    };
+    // Shared push-to-talk flag toggled from the stdin thread.
+    let ptt = capture.as_ref().map(|c| c.enabled());
+
     // ── Spawn the PTY + shell ────────────────────────────────────────────
     let pty_system = native_pty_system();
     let pair = pty_system
@@ -342,6 +367,7 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
 
     // stdin reader thread: hotkeys + forward keystrokes into the PTY.
     {
+        let ptt_thread = ptt.clone();
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
             let mut prefix_armed = false;
@@ -363,6 +389,12 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
                             b'q' | b'Q' => {
                                 let _ = ctl_tx.send(Ctl::Quit);
                                 return;
+                            }
+                            b't' | b'T' => {
+                                if let Some(p) = &ptt_thread {
+                                    let on = !p.load(Ordering::Relaxed);
+                                    p.store(on, Ordering::Relaxed);
+                                }
                             }
                             b if b == prefix => forward.push(prefix),
                             _ => {} // unknown command: swallow
@@ -403,6 +435,12 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
             // PTY output → relay.
             Some(chunk) = out_rx.recv() => {
                 if write.send(bin(&HostToRelay::Output(chunk))).await.is_err() {
+                    break;
+                }
+            }
+            // Voice frames → relay (only yields while voice is on and PTT active).
+            Some(frame) = audio_rx.recv() => {
+                if write.send(bin(&HostToRelay::Audio(audio::encode_frame(&frame)))).await.is_err() {
                     break;
                 }
             }

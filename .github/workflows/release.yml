@@ -40,10 +40,10 @@ jobs:
         with:
           targets: ${{ matrix.target }}
 
-      # native-tls links the system OpenSSL on Linux.
-      - name: Install OpenSSL (Linux)
+      # native-tls links system OpenSSL; cpal (voice) links ALSA — both on Linux.
+      - name: Install Linux build deps
         if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev libasound2-dev
 
       - name: Build tcast
         # TCAST_DEFAULT_RELAY bakes a hosted relay into the binary so a freshly

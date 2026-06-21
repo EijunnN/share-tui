@@ -77,6 +77,11 @@ struct App {
     composing: bool,
     /// Whether the chat pane is shown.
     chat_open: bool,
+    /// Lazily-started speaker playback for host voice (None until the first
+    /// frame arrives, or while muted).
+    playback: Option<audio::Playback>,
+    /// Whether the viewer muted incoming voice.
+    muted: bool,
 }
 
 impl App {
@@ -243,6 +248,8 @@ pub async fn run(cfg: WatchConfig) -> Result<()> {
         chat_input: String::new(),
         composing: false,
         chat_open: cfg.chat_open,
+        playback: None,
+        muted: false,
     };
 
     let mut terminal = ratatui::init();
@@ -348,6 +355,12 @@ fn handle_key(
                         app.chat_open = true;
                         app.composing = true;
                     }
+                    KeyCode::Char('m') => {
+                        app.muted = !app.muted;
+                        if app.muted {
+                            app.playback = None; // release the output device
+                        }
+                    }
                     KeyCode::Char('q') | KeyCode::Esc | KeyCode::Backspace => {
                         let _ = cmd_tx.send(WatchToRelay::Leave);
                         let _ = cmd_tx.send(WatchToRelay::List);
@@ -432,6 +445,17 @@ fn handle_net(app: &mut App, cmd_tx: &mpsc::UnboundedSender<WatchToRelay>, net: 
             RelayToWatch::Output(b) => {
                 if let Some(p) = app.parser.as_mut() {
                     p.process(&b);
+                }
+            }
+            RelayToWatch::Audio(bytes) => {
+                if !app.muted {
+                    // Lazily open the speaker on the first voice frame.
+                    if app.playback.is_none() {
+                        app.playback = audio::Playback::start().ok();
+                    }
+                    if let Some(pb) = app.playback.as_mut() {
+                        pb.push(&audio::decode_frame(&bytes));
+                    }
                 }
             }
             RelayToWatch::Resize { cols, rows } => {
@@ -646,8 +670,13 @@ fn ui_watch(f: &mut Frame, app: &mut App) {
             Span::styled("  (Enter send · Esc cancel)", Style::new().fg(Color::DarkGray)),
         ])
     } else {
+        let mut hint = String::from(" c chat · ");
+        if app.playback.is_some() || app.muted {
+            hint.push_str(if app.muted { "🔇 m unmute · " } else { "🔊 m mute · " });
+        }
+        hint.push_str("q/Esc back · Ctrl-C quit ");
         Line::from(vec![Span::styled(
-            " c chat · q/Esc back · Ctrl-C quit ",
+            hint,
             Style::new().fg(Color::Black).bg(Color::DarkGray),
         )])
     };
