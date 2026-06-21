@@ -51,6 +51,9 @@ pub struct StreamConfig {
     pub chat: bool,
     /// Capture the microphone for push-to-talk voice (`tcast stream --voice`).
     pub voice: bool,
+    /// Single key (a Ctrl- control byte) that toggles the mic while voice is on.
+    /// Only intercepted when `voice` is true, so it stays usable otherwise.
+    pub voice_key: u8,
     /// Hotkey prefix byte (a Ctrl- control code). See [`DEFAULT_PREFIX`].
     pub prefix: u8,
 }
@@ -243,6 +246,7 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
     let shell = cfg.shell.unwrap_or_else(default_shell);
     let shell_lbl = shell_label(&shell);
     let prefix = cfg.prefix;
+    let voice_key = cfg.voice_key;
 
     let (cols, rows) = crossterm::terminal::size().unwrap_or((80, 24));
 
@@ -293,8 +297,8 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
     let capture = if cfg.voice {
         match audio::Capture::start(audio_tx) {
             Ok(c) => {
-                let pk = format!("Ctrl-{}", (prefix | 0x40) as char);
-                println!("tcast · voice ready — {pk} t toggles your mic (push-to-talk)");
+                let vk = format!("Ctrl-{}", (voice_key | 0x40) as char);
+                println!("tcast · voice ready — press {vk} to talk (toggles your mic)");
                 Some(c)
             }
             Err(e) => {
@@ -390,14 +394,14 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
                                 let _ = ctl_tx.send(Ctl::Quit);
                                 return;
                             }
-                            b't' | b'T' => {
-                                if let Some(p) = &ptt_thread {
-                                    let on = !p.load(Ordering::Relaxed);
-                                    p.store(on, Ordering::Relaxed);
-                                }
-                            }
                             b if b == prefix => forward.push(prefix),
                             _ => {} // unknown command: swallow
+                        }
+                    } else if ptt_thread.is_some() && byte == voice_key {
+                        // Single-key push-to-talk toggle (only while voice is on).
+                        if let Some(p) = &ptt_thread {
+                            let on = !p.load(Ordering::Relaxed);
+                            p.store(on, Ordering::Relaxed);
                         }
                     } else if byte == prefix {
                         prefix_armed = true;

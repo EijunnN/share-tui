@@ -76,9 +76,13 @@ struct StreamArgs {
     /// Accept viewer chat on this stream (view it with `tcast chat`).
     #[arg(long)]
     chat: bool,
-    /// Capture your mic for push-to-talk voice (prefix + `t` toggles it).
+    /// Capture your mic for push-to-talk voice (Ctrl-T toggles it; see --voice-key).
     #[arg(long)]
     voice: bool,
+    /// Key to toggle the mic while voice is on — a letter mapped to its Ctrl-
+    /// code (default: T → Ctrl-T). Only intercepted while `--voice` is set.
+    #[arg(long)]
+    voice_key: Option<char>,
 }
 
 #[derive(Args)]
@@ -174,6 +178,11 @@ async fn main() -> Result<()> {
                 Some(c) => anyhow::bail!("--prefix must be a letter a-z (got {c:?})"),
                 None => host::DEFAULT_PREFIX,
             };
+            let voice_key = match a.voice_key {
+                Some(c) if c.is_ascii_alphabetic() => (c.to_ascii_uppercase() as u8) & 0x1f,
+                Some(c) => anyhow::bail!("--voice-key must be a letter a-z (got {c:?})"),
+                None => b'T' & 0x1f, // Ctrl-T
+            };
             host::run(host::StreamConfig {
                 relay,
                 name: a.name.or_else(|| cfg.name.clone()),
@@ -182,6 +191,7 @@ async fn main() -> Result<()> {
                 auth_key: a.auth_key.or_else(|| cfg.auth_key.clone()),
                 chat: a.chat,
                 voice: a.voice,
+                voice_key,
                 prefix,
             })
             .await

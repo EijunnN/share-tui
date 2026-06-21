@@ -54,7 +54,7 @@ tcast list                  # print the public directory (add --json for scripts
 tcast stream                # stream your terminal (private, code-only)
 tcast stream --public       # …and list it in the public directory
 tcast stream --chat         # …and let viewers send chat
-tcast stream --voice        # …and talk to viewers (Ctrl-] t = push-to-talk)
+tcast stream --voice        # …and talk to viewers (press Ctrl-T to talk)
 tcast chat                  # (while streaming) read viewer chat + reply
 ```
 
@@ -147,7 +147,7 @@ cargo run -p tcast -- watch --relay ws://127.0.0.1:4455 <code>
 ```
 tcast [--relay URL] [--config PATH] [COMMAND]
   (no command)             open the watch browser
-  stream [--name NAME] [--shell SHELL] [--public] [--auth-key KEY] [--prefix LETTER] [--chat] [--voice]
+  stream [--name NAME] [--shell SHELL] [--public] [--auth-key KEY] [--prefix LETTER] [--chat] [--voice] [--voice-key LETTER]
   watch  [CODE_OR_ID] [--name NAME]
   chat                     open chat for your own running stream (read + reply)
   list   [--json]
