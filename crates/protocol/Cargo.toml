@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+dirs = "5.0.1"
 rmp-serde = "1.3.1"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_bytes = "0.11.19"

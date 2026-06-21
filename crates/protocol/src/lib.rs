@@ -198,6 +198,72 @@ pub fn decode<T: DeserializeOwned>(bytes: &[u8]) -> Result<T, rmp_serde::decode:
     rmp_serde::from_slice(bytes)
 }
 
+// ───────────────────────────── Owned streams ────────────────────────────
+
+/// Local markers for streams *this machine* is currently hosting, so the watch
+/// client can hide/refuse the operator's own streams (you shouldn't watch
+/// yourself). Purely client-side and advisory — it never touches the wire and
+/// only catches the common same-machine case. A marker is a file named after the
+/// `stream_id` whose contents are the join `code`, under the OS config dir at
+/// `tcast/owned/`. Markers are removed when the host stops; a marker left behind
+/// by a crash is harmless (ids/codes are unique, so it can only ever match a
+/// stream that no longer exists).
+pub mod owned {
+    use std::fs;
+    use std::path::PathBuf;
+
+    fn dir() -> Option<PathBuf> {
+        dirs::config_dir().map(|d| d.join("tcast").join("owned"))
+    }
+
+    fn file_name(stream_id: &str) -> String {
+        stream_id
+            .chars()
+            .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
+            .collect()
+    }
+
+    /// Record that this machine owns `stream_id` (joinable via `code`).
+    pub fn mark(stream_id: &str, code: &str) {
+        if let Some(d) = dir() {
+            let _ = fs::create_dir_all(&d);
+            let _ = fs::write(d.join(file_name(stream_id)), code);
+        }
+    }
+
+    /// Drop the marker for a stream this machine no longer hosts.
+    pub fn unmark(stream_id: &str) {
+        if let Some(d) = dir() {
+            let _ = fs::remove_file(d.join(file_name(stream_id)));
+        }
+    }
+
+    /// Every `(stream_id, code)` this machine currently claims to own.
+    pub fn list() -> Vec<(String, String)> {
+        let Some(d) = dir() else {
+            return Vec::new();
+        };
+        let Ok(entries) = fs::read_dir(&d) else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for e in entries.flatten() {
+            if let Ok(name) = e.file_name().into_string() {
+                let code = fs::read_to_string(e.path()).unwrap_or_default().trim().to_string();
+                out.push((name, code));
+            }
+        }
+        out
+    }
+
+    /// True if `target` (a join code or a stream id) is owned by this machine.
+    pub fn is_owned(target: &str) -> bool {
+        list()
+            .iter()
+            .any(|(id, code)| id == target || code == target)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

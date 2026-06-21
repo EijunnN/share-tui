@@ -7,6 +7,7 @@
 //! The CLI front-end calls [`run`] for the interactive browser/viewer and
 //! [`list`] for a one-shot, non-interactive directory dump (`tcast list`).
 
+use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::{Context, Result};
@@ -59,6 +60,9 @@ struct App {
     /// The exact target string last joined (a code or a public id), used to
     /// auto-rejoin after a reconnect.
     last_target: Option<String>,
+    /// stream_ids hosted by this same machine — filtered out of the browse list
+    /// so you never end up watching your own stream.
+    owned_ids: HashSet<String>,
 }
 
 impl App {
@@ -146,6 +150,12 @@ pub async fn list(relay: String, json: bool) -> Result<()> {
         }
     };
 
+    let owned: HashSet<String> = protocol::owned::list().into_iter().map(|(id, _)| id).collect();
+    let streams: Vec<StreamInfo> = streams
+        .into_iter()
+        .filter(|s| !owned.contains(&s.stream_id))
+        .collect();
+
     if json {
         println!("{}", serde_json::to_string_pretty(&streams)?);
         return Ok(());
@@ -180,6 +190,15 @@ pub async fn list(relay: String, json: bool) -> Result<()> {
 /// Open the interactive spectator UI: browse public streams, or (if
 /// `cfg.target` is set) join that code/id directly.
 pub async fn run(cfg: WatchConfig) -> Result<()> {
+    // Same-machine guard: don't let the operator watch their own stream.
+    let owned = protocol::owned::list();
+    if let Some(t) = &cfg.target
+        && owned.iter().any(|(id, code)| id == t || code == t)
+    {
+        anyhow::bail!("that's your own stream — you can't watch yourself");
+    }
+    let owned_ids: HashSet<String> = owned.into_iter().map(|(id, _)| id).collect();
+
     let url = format!("{}/watch", cfg.relay.trim_end_matches('/'));
 
     let (cmd_tx, cmd_rx) = mpsc::unbounded_channel::<WatchToRelay>();
@@ -199,6 +218,7 @@ pub async fn run(cfg: WatchConfig) -> Result<()> {
         paused: false,
         pending_target: cfg.target.clone(),
         last_target: None,
+        owned_ids,
     };
 
     let mut terminal = ratatui::init();
@@ -333,7 +353,10 @@ fn handle_net(app: &mut App, cmd_tx: &mpsc::UnboundedSender<WatchToRelay>, net: 
         }
         Net::Msg(msg) => match msg {
             RelayToWatch::Streams(v) => {
-                app.streams = v;
+                app.streams = v
+                    .into_iter()
+                    .filter(|s| !app.owned_ids.contains(&s.stream_id))
+                    .collect();
                 if app.streams.is_empty() {
                     app.list_state.select(None);
                 } else {

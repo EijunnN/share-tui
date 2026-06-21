@@ -214,6 +214,24 @@ fn write_stdout(lock: &Mutex<()>, bytes: &[u8]) {
 
 // ──────────────────────────────── run ────────────────────────────────────
 
+/// Clears this machine's "owned stream" marker (see [`protocol::owned`]) when the
+/// host session ends — on any return path or panic — so the watcher stops
+/// hiding/refusing a stream that is no longer live.
+struct OwnedGuard(String);
+
+impl OwnedGuard {
+    fn new(stream_id: &str, code: &str) -> Self {
+        protocol::owned::mark(stream_id, code);
+        OwnedGuard(stream_id.to_string())
+    }
+}
+
+impl Drop for OwnedGuard {
+    fn drop(&mut self) {
+        protocol::owned::unmark(&self.0);
+    }
+}
+
 /// Start a host session and stream until the shell exits or the user quits.
 pub async fn run(cfg: StreamConfig) -> Result<()> {
     let name = cfg.name.unwrap_or_else(default_name);
@@ -258,6 +276,10 @@ pub async fn run(cfg: StreamConfig) -> Result<()> {
     };
 
     print_banner(&name, &shell_lbl, cfg.public, &code, &stream_id, &cfg.relay, prefix);
+
+    // Mark this stream as locally owned so `tcast watch` hides/refuses it; the
+    // guard clears the marker when the session ends (any exit path or panic).
+    let _owned = OwnedGuard::new(&stream_id, &code);
 
     // ── Spawn the PTY + shell ────────────────────────────────────────────
     let pty_system = native_pty_system();
