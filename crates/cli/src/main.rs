@@ -47,6 +47,8 @@ enum Command {
         #[arg(long)]
         json: bool,
     },
+    /// Update tcast in place to the latest GitHub release.
+    Upgrade,
     /// Manage saved settings (relay URL, auth key, name).
     Config {
         #[command(subcommand)]
@@ -161,6 +163,7 @@ async fn main() -> Result<()> {
             let relay = config::resolve_relay(cli.relay, &cfg);
             watch::list(relay, json).await
         }
+        Some(Command::Upgrade) => tokio::task::spawn_blocking(run_upgrade).await?,
         Some(Command::Stream(a)) => {
             let relay = config::resolve_relay(cli.relay, &cfg);
             let prefix = match a.prefix {
@@ -226,6 +229,25 @@ fn run_config(
                 if cfg.auth_key.is_some() { "set" } else { "not set" }
             );
         }
+    }
+    Ok(())
+}
+
+/// Replace the running binary with the latest GitHub release for this platform.
+fn run_upgrade() -> Result<()> {
+    let bin = if cfg!(windows) { "tcast.exe" } else { "tcast" };
+    let status = self_update::backends::github::Update::configure()
+        .repo_owner("EijunnN")
+        .repo_name("tcast")
+        .bin_name(bin)
+        .show_download_progress(true)
+        .current_version(env!("CARGO_PKG_VERSION"))
+        .build()?
+        .update()?;
+    if status.updated() {
+        println!("tcast updated to {}", status.version());
+    } else {
+        println!("tcast is already up to date ({})", status.version());
     }
     Ok(())
 }

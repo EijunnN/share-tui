@@ -41,6 +41,9 @@ tcast config set-relay wss://relay.example.com
 > No prebuilt binary for your platform? Install with Cargo instead:
 > `cargo install --git https://github.com/EijunnN/tcast tcast`
 
+**Updating:** once installed, run `tcast upgrade` to replace your binary in place
+with the latest release (works on Linux, macOS and Windows).
+
 ## Use it
 
 ```sh
@@ -148,6 +151,7 @@ tcast [--relay URL] [--config PATH] [COMMAND]
   watch  [CODE_OR_ID] [--name NAME]
   chat                     open chat for your own running stream (read + reply)
   list   [--json]
+  upgrade                  self-update to the latest GitHub release
   config set-relay <URL> | set-auth-key <KEY> | set-name <NAME> | show [--path]
 ```
 

@@ -60,11 +60,9 @@ jobs:
         run: |
           set -euo pipefail
           asset="tcast-${{ matrix.target }}.tar.gz"
-          staging="tcast-${{ matrix.target }}"
-          mkdir "$staging"
-          cp "target/${{ matrix.target }}/release/tcast" "$staging/"
-          cp README.md LICENSE "$staging/" 2>/dev/null || true
-          tar -czf "$asset" "$staging"
+          # Archive the binary at the root so `tcast upgrade` (self_update) and
+          # the install scripts can locate it without a staging subdir.
+          tar -czf "$asset" -C "target/${{ matrix.target }}/release" tcast
           if command -v sha256sum >/dev/null; then sha256sum "$asset" > "$asset.sha256"; else shasum -a 256 "$asset" > "$asset.sha256"; fi
           echo "ASSET=$asset" >> "$GITHUB_ENV"
 
@@ -73,12 +71,8 @@ jobs:
         shell: pwsh
         run: |
           $asset = "tcast-${{ matrix.target }}.zip"
-          $staging = "tcast-${{ matrix.target }}"
-          New-Item -ItemType Directory -Force -Path $staging | Out-Null
-          Copy-Item "target/${{ matrix.target }}/release/tcast.exe" "$staging/"
-          if (Test-Path README.md) { Copy-Item README.md "$staging/" }
-          if (Test-Path LICENSE)   { Copy-Item LICENSE   "$staging/" }
-          Compress-Archive -Path $staging -DestinationPath $asset -Force
+          # Binary at the zip root (see the Unix step for why).
+          Compress-Archive -Path "target/${{ matrix.target }}/release/tcast.exe" -DestinationPath $asset -Force
           $hash = (Get-FileHash $asset -Algorithm SHA256).Hash.ToLower()
           "$hash  $asset" | Out-File -Encoding ascii "$asset.sha256"
           "ASSET=$asset" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
